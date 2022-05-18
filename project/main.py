@@ -1,6 +1,4 @@
 #!/usr/bin/env pybricks-micropython
-import sys
-import __init__
 from pybricks import robotics
 from pybricks.hubs import EV3Brick
 from pybricks.ev3devices import Motor, ColorSensor, UltrasonicSensor, TouchSensor
@@ -16,6 +14,7 @@ positive_direction = Direction.COUNTERCLOCKWISE
 crane_positive_direction = Direction.CLOCKWISE
 gears = [12, 20]
 craneGears = [16, 36]
+
 
 Left_drive=Motor(Port.C, positive_direction, gears) 
 Right_drive=Motor(Port.B, positive_direction, gears)
@@ -36,93 +35,139 @@ COLOR_YELLOW = 4
 COLOR_RED = 5
 COLOR_BROWN = 7
 COLLISION_DISTANCE = 300
-SPEED_MULTIPLIER = 0.4
-TURN_MULTIPLIER = 3.2
-
-DRIVE_SPEED = 50
-PROPORTIONAL_GAIN = 0.6
+TURN_MULTIPLIER = 0.8
+DRIVE_SPEED = 35
+PROPORTIONAL_GAIN = 0.8
 DEFAULT_RANGE = range(50, 70)
 currentColor = Color.GREEN
 
+GREEN = 12
+BROWN = 20
+PURPLE = range(10, 13)
+RED = 82
+BLUE = 13
 
-def isColliding(distance:int = COLLISION_DISTANCE):
-    # print(Ultrasonic_sensor.distance())
-    return bool(Ultrasonic_sensor.distance() <= distance)
+currently_lifting = False
 
-def collision():
-    colliding = isColliding()
+roundabout_color = Color.BROWN
+
+def drawToScreen(x, y, text):
+    ev3.screen.clear()
+    ev3.screen.draw_text(x, y, text)
+
+def collision(distance: int = COLLISION_DISTANCE):
+    colliding = bool(Ultrasonic_sensor.distance() <= distance)
     while colliding:
         robot.stop()
+        colliding = bool(Ultrasonic_sensor.distance() <= distance)
 
-# Välj en destination. Den kör på vägen beroende på vilken den är. Sedan när den är i rondellen kör den hela tiden tills den hittar destination och
-# sedan går över till navRoad för destination.
-
-
-def roundabout(destination):
-    GREEN = 24
-    WHITE = 85
-    threshold = (GREEN + WHITE) / 2
-
-    while currentColor == Color.GREEN:
-        collision()
-
-        # Calculate the deviation from the threshold.§
-        deviation = Light_sensor.reflection() - threshold
-
-        # Calculate the turn rate.
-        turn_rate = PROPORTIONAL_GAIN * deviation
-
-        # Set the drive base speed and turn rate.
-        robot.drive(DRIVE_SPEED, turn_rate)
-
-        # You can wait for a short time or do other things in this loop.
-        wait(10)
-
-        #Kanske kolla mailbox som man skickar till och sedan ändrar currentColor för att gå  till anting findBlueWarehouse eller röd
-        if Light_sensor.color() == destination:
-            robot.stop()
+def emergency_mode():
+    drawToScreen(40, 50, "EMERGENCY MODE")
+    for i in range(10):
+        ev3.speaker.say("help me")
 
 
+def deliveryController():
+    robot.straight(100)
+    robot.turn(180)
+    robot.straight(350)
 
-def get_turn_rate():
-    optimal = range(50, 70)
-    drive = Light_sensor.reflection()
-    #alltid svänga höger
+    Crane_motor.run_angle(900, -45, then=Stop.HOLD, wait=True)
 
-    threshold = (13 + 84) / 2
-    # Calculate the deviation from the threshold.
-    deviation = Light_sensor.reflection() - threshold
+    robot.straight(-350)
+    robot.trun(195)
+    straight(200)
 
-    if drive in optimal:
-        turn_rate = PROPORTIONAL_GAIN * deviation * 1
-        return turn_rate
+
+def wareHouseController(road):
+    done_lifting = False
+    while not done_lifting:
+
+        if road == Color.BLUE:
+            navRoad([Color.BLACK])
+        if road == Color.RED:
+            navRoad([Color.BLACK, Color.BROWN])
+
+        if Front_button.pressed():
+            done_lifting = safeLift()
+
+    currently_lifting = True
+
+    if road == Color.BLUE:
+        robot.straight(-500)
+        robot.turn(-360)
+    if road == Color.RED:
+        robot.straight(-600)
+        robot.turn(-160)
+        robot.straight(500)
+    currentDestination.append(Color.GREEN)
+    drawToScreen(20, 50, "DELIVERY")
+
+
+def test_rate(optimal_colors):
+    current_color = Light_sensor.color()
+    if current_color in optimal_colors:
+        return 3
+    elif not current_color in optimal_colors and current_color != Color.WHITE:
+        return 0
     else:
-        turn_rate = PROPORTIONAL_GAIN * deviation * -1
-        return turn_rate
+        return -1
 
-
-# Crane_motor.run_angle(180, 120, then=Stop.HOLD, wait=True)
-currentDestination = []
-currentDestination.append(Color.RED)
 
 def get_speed(turn_rate: int) -> int:
-   default_speed = (100 * SPEED_MULTIPLIER)
-   speed = default_speed - turn_rate * (turn_rate / default_speed)
-   return speed if speed > 10 else 10
+   default_speed = DRIVE_SPEED * 2
+   speed = default_speed - turn_rate
+   return 10 if speed > DRIVE_SPEED else 10
 
-def navRoad(road):
-    robot.drive(get_speed(get_turn_rate()), get_turn_rate())
+
+def navRoundabout(destination):
+    drawToScreen(20, 50, "ROUNDABOUT")
+
+    # Whilen under? kanske ta bort allt efter or
+    while Light_sensor.color() != destination:
+        print(Light_sensor.color())
+        navRoad([destination, roundabout_color])
+
+def navRoad(roads):
+    drawToScreen(20, 50, "DESTINATION")
+    turn_rate = PROPORTIONAL_GAIN * test_rate(roads) * 22
+
+    robot.drive(get_speed(turn_rate), turn_rate)
+
+    collision()
     wait(10)
 
-def main():
-    while True:
-        print("yo")
-        navRoad(Light_sensor.color())
+def safeLift():
+    drawToScreen(40, 50, "LIFTING")
 
-        if currentDestination[len(currentDestination)-1] == Color.GREEN:
-            roundabout()
+    robot.stop()
+    Crane_motor.run_angle(900, 45, then=Stop.HOLD, wait=True)
 
-        wait(10)
+    return True
 
-if __name__ == '__main__':
-    sys.exit(main())
+
+currentDestination = [roundabout_color, Color.GREEN, Color.RED]
+
+while True:
+    navRoad(currentDestination)   
+
+    # # Color of roundabout
+    # if Light_sensor.color() == Color.GREEN:
+    #     # Destination color
+    #     navRoundabout(currentDestination[-1])
+    # else:
+    #     # Allowed colors for roads
+    #     navRoad([Color.BROWN, Color.GREEN, Color.RED, Color.BLUE])
+    #     # navRoad([Color.BROWN, Color.BLUE, Color.GREEN])
+    #     # navRoad([Color.BROWN, Color.RED, Color.BLUE, Color.GREEN, Color.PURPLE])
+
+    if currently_lifting is True and not Front_button.pressed():
+        emergency_mode()
+
+    if Light_sensor.color() == Color.BLACK:
+        if currentDestination[-1] == Color.GREEN:
+            deliveryController()
+        if currentDestination[-1] == Color.RED:
+            wareHouseController(Color.RED)
+        if currentDestination[-1] == Color.BLUE:
+            wareHouseController(Color.BLUE)
