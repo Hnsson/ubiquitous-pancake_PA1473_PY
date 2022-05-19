@@ -68,15 +68,15 @@ def emergency_mode():
 
 
 def deliveryController():
-    robot.straight(100)
+    robot.straight(250)
     robot.turn(180)
     robot.straight(350)
 
     Crane_motor.run_angle(900, -45, then=Stop.HOLD, wait=True)
 
     robot.straight(-350)
-    robot.trun(195)
-    straight(200)
+    robot.turn(195)
+    straight(300)
 
 
 def wareHouseController(road):
